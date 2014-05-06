@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<title>CAVE Toolset</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body 
+			{
+				font-family: Monospace;
+				background-color: #000;
+				color: #fff;
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#blocker 
+			{
+				position: absolute;
+				width: 100%;
+				height: 100%;
+				background-color: rgba(0,0,0,0.5);
+			}
+
+			#instructions 
+			{
+				width: 100%;
+				height: 100%;
+
+				display: -webkit-box;
+				display: -moz-box;
+				display: box;
+
+				-webkit-box-orient: horizontal;
+				-moz-box-orient: horizontal;
+				box-orient: horizontal;
+
+				-webkit-box-pack: center;
+				-moz-box-pack: center;
+				box-pack: center;
+
+				-webkit-box-align: center;
+				-moz-box-align: center;
+				box-align: center;
+
+				color: #ffffff;
+				text-align: center;
+
+				cursor: pointer;
+			}
+		</style>
+	</head>
+	<body>
+		<div id="message"></div>
+		<div id="blocker" style="display: -webkit-box;">
+			<div id="instructions" style="">
+				<span style="font-size:20px">Click to navigate</span>
+				<br />
+				(Arrow keys, W, A, S, D = Move, SPACE = Jump, MOUSE = Look)
+			</div>
+		</div>
+    	<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.0/jquery.min.js"></script>
+    	<script src="../js/bootstrap/js/bootstrap.min.js"></script>
+		<script src="../js/three.js/build/three.js"></script>
+		<script src="../js/three.js/examples/js/loaders/OBJLoader.js"></script>
+		<script src="../js/three.js/examples/js/loaders/OBJMTLLoader.js"></script>
+		<script src="../js/three.js/examples/js/loaders/MTLLoader.js"></script>
+		<script src="../js/three.js/examples/js/loaders/ColladaLoader.js"></script>
+		<script src="../js/three.js/examples/js/Detector.js"></script>
+		<script src="../js/three.js/examples/js/libs/stats.min.js"></script>
+		<script src="../js/three.js/examples/js/controls/FirstPersonControls.js"></script>
+		<script src="../js/three.js/examples/js/controls/PointerLockControls.js"></script>
+		<script>
+			var blocker = document.getElementById('blocker');
+			var instructions = document.getElementById('instructions');
+
+			var havePointerLock = 'pointerLockElement' in document || 'mozPointerLockElement' in document || 'webkitPointerLockElement' in document;
+	
+			if (havePointerLock) 
+			{
+				var element = document.body;
+
+				var pointerlockchange = function(event) 
+				{
+					if (document.pointerLockElement === element || document.mozPointerLockElement === element || document.webkitPointerLockElement === element) 
+					{
+						controls.enabled = true;
+						blocker.style.display = 'none';
+					} else 
+					{
+						controls.enabled = false;
+
+						blocker.style.display = '-webkit-box';
+						blocker.style.display = '-moz-box';
+						blocker.style.display = 'box';
+
+						instructions.style.display = '';
+					}
+				}
+
+				var pointerlockerror = function(event) 
+				{
+					instructions.style.display = '';
+				}
+				
+				// Hook pointer lock state change events
+				document.addEventListener('pointerlockchange', pointerlockchange, false);
+				document.addEventListener('mozpointerlockchange', pointerlockchange, false);
+				document.addEventListener('webkitpointerlockchange', pointerlockchange, false);
+
+				document.addEventListener('pointerlockerror', pointerlockerror, false);
+				document.addEventListener('mozpointerlockerror', pointerlockerror, false);
+				document.addEventListener('webkitpointerlockerror', pointerlockerror, false);
+
+				instructions.addEventListener('click', function(event) 
+				{
+					instructions.style.display = 'none';
+
+					// Ask the browser to lock the pointer
+					element.requestPointerLock = element.requestPointerLock || element.mozRequestPointerLock || element.webkitRequestPointerLock;
+
+					if (/Firefox/i.test(navigator.userAgent)) 
+					{
+						var fullscreenchange = function(event) 
+						{
+							if (document.fullscreenElement === element || document.mozFullscreenElement === element || document.mozFullScreenElement === element) 
+							{
+								document.removeEventListener('fullscreenchange', fullscreenchange);
+								document.removeEventListener('mozfullscreenchange', fullscreenchange);
+
+								element.requestPointerLock();
+							}
+						}
+
+						document.addEventListener('fullscreenchange', fullscreenchange, false);
+						document.addEventListener('mozfullscreenchange', fullscreenchange, false);
+
+						element.requestFullscreen = element.requestFullscreen || element.mozRequestFullscreen || element.mozRequestFullScreen || element.webkitRequestFullscreen;
+						element.requestFullscreen();
+					} else 
+					{
+						element.requestPointerLock();
+					}
+				}, false);
+
+			} else 
+			{
+				instructions.innerHTML = 'Your browser doesn\'t seem to support Pointer Lock API';
+			}
+
+			function FileExists(path)
+			{
+				var http = new XMLHttpRequest();
+				http.open('HEAD', path, false);
+				try
+				{
+					http.send();
+					return http.status != 404;
+				}
+				catch (exception)
+				{
+					if (exception.name == 'NetworkError')
+					{
+						console.log('File (' + path + ') could not be found.')
+					}
+				}
+			}
+
+			// GET THE VARIABLES FROM THE HOMEPAGE
+			var query = window.location.search;
+			if (query.substring(0, 1) == '?') 
+			{
+    			query = query.substring(1);
+  			}
+
+  			var input = query.split(','); 
+  			for (i = 0; (i < input.length); i++) 
+  			{
+    			input[i] = unescape(input[i]);
+  			}
+
+			/* 1. - Model loaders for .obj & one other? (.3ds/.collada?)
+	 		2. - FPS-style controls
+			3. - CAVE Mode (multiple views)
+			4. - Tracking (CCV?)
+			5. - Logging */
+
+			/* MODEL LOADER */
+			// Already have mrdoob's OBJLoader included, so use this. 
+			var container, stats;
+			var views, scene, camera, renderer; 
+			var controls, time = Date.now();
+			var mouseX = 0, mouseY = 0;
+			var windowWidth, windowHeight;
+			var windowHalfX = window.innerWidth / 2;
+			var windowHalfY = window.innerHeight / 2;
+
+			var angleOfRotation = input[5];
+
+			shortAxisFOV = angleOfRotation;		
+			// var s = shortAxisFOV / 2;
+			// var a = (window.innerWidth / 3) / window.innerHeight;
+			// var l = Math.atan(a * Math.tan(s * Math.PI / 180)) * (180 / Math.PI);
+			// var longAxisFOV = Math.abs(l) * 2;
+			var longAxisFOV = input[6];
+
+			var mesh;
+			var objects = [];
+
+			var modelFileName = input[0].replace(/^C:\\fakepath\\/, "");
+			var modelFilePath = "../models/" + modelFileName;
+
+			var textureFileName = input[2].replace(/^C:\\fakepath\\/, "");
+			if (textureFileName != "")
+			{
+				var textureFilePath = "../models/textures/" + textureFileName;
+			}
+			
+			var mtlFilePath = '../models/.mtl';
+
+			// Create the different views for CAVE mode
+			var views = 
+			[
+				{ 
+					left: 0,
+					bottom: 0,
+					width: 1.0/3.0,
+					height: 1.0,
+					background: new THREE.Color().setRGB( 0.5, 0.5, 0.7 ),
+					eye: [ 0, 0, 0 ], // The position of the camera
+					up: [ 0, 1, 0 ],
+					fov: longAxisFOV, // If using CAVE mode, use shortAxisFOV
+					updateCamera: function (camera, scene) 
+					{
+					  camera.rotation.y = angleOfRotation * Math.PI / 180;
+					},
+					updateFOV: function () 
+					{
+						a = (window.innerWidth / 3) / window.innerHeight;
+						l = Math.atan(a * Math.tan(s * Math.PI / 180)) * (180 / Math.PI);
+						longAxisFOV = Math.abs(l) * 2;
+						fov = longAxisFOV;
+					}
+				},
+				{ 
+					left: 1.0/3.0,
+					bottom: 0,
+					width: 1.0/3.0,
+					height: 1.0,
+					background: new THREE.Color().setRGB( 0.7, 0.5, 0.5 ),
+					eye: [ 0, 0, 0 ],
+					up: [ 0, 1, 0 ],
+					fov: longAxisFOV,
+					updateCamera: function (camera, scene) 
+					{
+					  camera.rotation.y = 0;
+					},
+					updateFOV: function () 
+					{
+						a = (window.innerWidth / 3) / window.innerHeight;
+						l = Math.atan(a * Math.tan(s * Math.PI / 180)) * (180 / Math.PI);
+						longAxisFOV = Math.abs(l) * 2;
+						fov = longAxisFOV;
+					}
+				},
+				{ 
+					left: 2.0/3.0,
+					bottom: 0,
+					width: 1.0/3.0,
+					height: 1.0,
+					background: new THREE.Color().setRGB( 0.5, 0.7, 0.7 ),
+					eye: [ 0, 0, 0 ],
+					up: [ 0, 1, 0 ],
+					fov: longAxisFOV,
+					updateCamera: function (camera, scene) 
+					{
+					  camera.rotation.y = -angleOfRotation * Math.PI / 180;
+					},
+					updateFOV: function () 
+					{
+						a = (window.innerWidth / 3) / window.innerHeight;
+						l = Math.atan(a * Math.tan(s * Math.PI / 180)) * (180 / Math.PI);
+						longAxisFOV = Math.abs(l) * 2;
+						fov = longAxisFOV;
+					}
+				}
+			];
+
+			init();
+			animate();
+
+			function init() 
+			{
+				container = document.createElement('div');
+				document.body.appendChild(container);
+
+				for (var i =  0; i < views.length; ++i) 
+				{
+					var view = views[i];
+					camera = new THREE.PerspectiveCamera(view.fov, window.innerWidth / window.innerHeight, 1, 1000);
+					camera.position.x = view.eye[ 0 ];
+					camera.position.y = view.eye[ 1 ];
+					camera.position.z = view.eye[ 2 ];
+					camera.up.x = view.up[ 0 ];
+					camera.up.y = view.up[ 1 ];
+					camera.up.z = view.up[ 2 ];
+					view.camera = camera;
+				}
+
+				// Scene
+				scene = new THREE.Scene();
+				
+				// Ambient & directional lighting
+				if (input[7] ==  "true")
+				{
+					var ambient = new THREE.AmbientLight(0x101030);
+					scene.add(ambient);
+					var directionalLight = new THREE.DirectionalLight(0xffeedd);
+					directionalLight.position.set(0, 0, 1);
+					scene.add(directionalLight); 
+				}			
+
+				// Renderer
+				renderer = new THREE.WebGLRenderer();
+				renderer.setSize(window.innerWidth, window.innerHeight);
+				container.appendChild(renderer.domElement);
+
+				// Texture(s)
+				var manager = new THREE.LoadingManager();
+				manager.onProgress = function(item, loaded, total)
+				{
+					console.log(item, loaded, total);
+				}
+
+				if (FileExists(textureFilePath))
+				{
+					var texture = new THREE.Texture();
+					var loader = new THREE.ImageLoader(manager);
+					loader.load(textureFilePath, function(image)
+					{
+						texture.image = image;
+						texture.needsUpdate = true;
+					});					
+				}
+
+				// Model
+				if (FileExists(modelFilePath))
+				{
+					if (input[1] == "obj")
+					{
+						var loader = new THREE.OBJLoader(manager);
+						//var loader = new THREE.OBJMTLLoader();
+						loader.load(modelFilePath, function(object) 
+						{
+							object.traverse(function(child) 
+							{
+								if (child instanceof THREE.Mesh)
+								{
+									if (FileExists(textureFilePath))
+									{
+										child.material.map = texture;
+									}
+								}
+							});
+
+							object.position.set(0, 0, 0);
+							scene.add(object);
+							var material = new THREE.MeshNormalMaterial();
+							mesh = new THREE.Mesh(object.children[0].geometry, material);
+							mesh.position.set(0, 0, 0);
+							objects.push(mesh);
+						});
+					}
+					else if (input[1] == "dae")
+					{
+						var loader = new THREE.ColladaLoader();
+						loader.options.convertUpAxis = true;
+						loader.load(modelFilePath, function(object)
+						{
+							dae = object.scene;
+							skin = object.skins[0];
+
+							dae.scale.x = dae.scale.y = dae.scale.z = 0.002;
+							dae.updateMatrix();
+							dae.position.set(0, 10, 0);
+							scene.add(dae);
+						});
+					}
+				}
+
+				// Controls
+				controls = new THREE.PointerLockControls(views[1].camera);
+				scene.add(controls.getObject());
+
+				// Raycaster for collision detection
+				yRay = new THREE.Raycaster();
+				yRay.ray.direction.set( 0, -1, 0 );
+
+				// Stats for performance
+				stats = new Stats();
+				stats.domElement.style.position = 'absolute';
+				stats.domElement.style.bottom = '0px';
+				container.appendChild(stats.domElement);
+			}
+
+			function collisionDetection()
+			{
+				unlockAllDirection();
+				controls.isOnObject(false);
+
+				yRay.ray.origin.copy(controls.getObject().position);
+				yRay.ray.origin.y -= 6;
+
+				var intersections = yRay.intersectObjects(objects);
+
+				if (intersections.length > 0) 
+				{
+					var distance = intersections[0].distance;
+
+					if (distance > 0 && distance < 6) 
+					{
+						controls.isOnObject(true);
+					}
+				}
+
+				var rotationMatrix;
+				var cameraDirection = controls.getDirection(new THREE.Vector3(0, 0, 0)).clone();
+			
+				if (controls.moveForward()) 
+				{
+					// Do nothing
+				}
+				else if (controls.moveBackward()) 
+				{
+					rotationMatrix = new THREE.Matrix4();
+					rotationMatrix.makeRotationY(180 * Math.PI / 180);
+				}
+				else if (controls.moveLeft()) 
+				{
+					rotationMatrix = new THREE.Matrix4();
+					rotationMatrix.makeRotationY(90 * Math.PI / 180);
+				}
+				else if (controls.moveRight()) 
+				{
+					rotationMatrix = new THREE.Matrix4();
+					rotationMatrix.makeRotationY((360-90) * Math.PI / 180);
+				}
+				else return;
+				
+				if (rotationMatrix !== undefined)
+				{
+					cameraDirection.applyMatrix4(rotationMatrix);
+				}
+
+				var rayCaster = new THREE.Raycaster(controls.getObject().position, cameraDirection);	
+				var intersects = rayCaster.intersectObjects(objects);
+				
+				if ((intersects.length > 0 && intersects[0].distance < 10)) 
+				{
+					lockDirection(); // Stop the camera from moving			
+				}
+			}
+
+			function lockDirection() 
+			{
+				if (controls.moveForward()) 
+				{
+					controls.lockMoveForward(true);
+				}
+				else if (controls.moveBackward()) 
+				{
+					controls.lockMoveBackward(true);
+				}
+				else if (controls.moveLeft()) 
+				{
+					controls.lockMoveLeft(true);
+				}
+				else if (controls.moveRight()) 
+				{
+					controls.lockMoveRight(true);
+				}
+			}
+
+			function unlockAllDirection()
+			{
+				controls.lockMoveForward(false);
+				controls.lockMoveBackward(false);
+				controls.lockMoveLeft(false);
+				controls.lockMoveRight(false);
+			}
+
+			function updateSize() 
+			{
+				if ( windowWidth != window.innerWidth || windowHeight != window.innerHeight )
+				{
+					windowWidth  = window.innerWidth;
+					windowHeight = window.innerHeight;
+
+					renderer.setSize ( windowWidth, windowHeight );
+				}
+			}
+
+			function animate() 
+			{
+				render();
+				stats.update(); // Update stats
+				requestAnimationFrame(animate);
+			}
+
+			function render() 
+			{
+				collisionDetection(); // Check for collisions
+				controls.update(Date.now() - time); // Update the controls	
+				updateSize(); // Update the size of the windows
+
+				// Render each view
+				for (var i = 0; i < views.length; ++i) 
+				{
+					view = views[i];
+					view.camera = views[1].camera; // Clone the middle camera that the controls belong to
+					camera = view.camera;
+
+					// Rotate the left and right views					
+					view.updateCamera(camera, scene);
+
+					var left   = Math.floor( windowWidth  * view.left );
+					var bottom = Math.floor( windowHeight * view.bottom );
+					var width  = Math.floor( windowWidth  * view.width );
+					var height = Math.floor( windowHeight * view.height );
+					renderer.setViewport( left, bottom, width, height );
+					renderer.setScissor( left, bottom, width, height );
+					renderer.enableScissorTest ( true );
+					renderer.setClearColor( view.background );
+
+					//view.updateFOV();
+					camera.aspect = width / height;
+					camera.updateProjectionMatrix();
+
+					renderer.render(scene, camera);
+				}
+
+				time = Date.now(); // Update time
+			}
+		</script>
+	</body>
+</html>
